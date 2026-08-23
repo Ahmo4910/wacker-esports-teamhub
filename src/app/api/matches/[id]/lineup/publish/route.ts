@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/apiAuth";
 import { notifyTeam, notifyUsers } from "@/lib/notifications";
 import { sendWebhookAnnouncement } from "@/lib/discord";
+import { FORMATION_LAYOUTS, type Formation } from "@/lib/constants";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const { session, error } = await requireRole(["CAPTAIN", "MANAGER"]);
@@ -41,17 +42,25 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   });
 
   try {
-    const starters = lineup.slots.filter((s) => s.isStarter && s.player).map((s) => s.player!.gamerTag);
-    const bench = lineup.slots.filter((s) => !s.isStarter && s.player).map((s) => s.player!.gamerTag);
+    const layout = FORMATION_LAYOUTS[lineup.formation as Formation] ?? [];
+    const labelFor = (slotKey: string) => layout.find((l) => l.key === slotKey)?.label ?? slotKey;
+    const yFor = (slotKey: string) => layout.find((l) => l.key === slotKey)?.y ?? 50;
+
+    const starterLines = lineup.slots
+      .filter((s) => s.isStarter && s.player)
+      .sort((a, b) => yFor(b.slotKey) - yFor(a.slotKey)) // Torwart zuerst, dann Abwehr → Mittelfeld → Sturm
+      .map((s) => `**${labelFor(s.slotKey)}:** ${s.player!.gamerTag}`);
+    const benchNames = lineup.slots.filter((s) => !s.isStarter && s.player).map((s) => s.player!.gamerTag);
+
     const appUrl = process.env.NEXTAUTH_URL || new URL(_req.url).origin;
     const descriptionParts = [
       lineup.formation ? `**Formation:** ${lineup.formation}` : null,
-      starters.length > 0 ? `**Startelf:** ${starters.join(", ")}` : null,
-      bench.length > 0 ? `**Ersatzbank:** ${bench.join(", ")}` : null,
+      starterLines.length > 0 ? `**Startelf:**\n${starterLines.join("\n")}` : null,
+      benchNames.length > 0 ? `**Ersatzbank:** ${benchNames.join(", ")}` : null,
     ].filter(Boolean);
     await sendWebhookAnnouncement({
       title: `🚀 Aufstellung veröffentlicht: vs. ${match.opponent}`,
-      description: descriptionParts.length > 0 ? descriptionParts.join("\n") : undefined,
+      description: descriptionParts.length > 0 ? descriptionParts.join("\n\n") : undefined,
       url: `${appUrl}/aufstellung/${match.id}`,
       footer: { text: "Komplette Aufstellung auf dem Spielfeld im Team-Hub ansehen" },
     });
