@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/apiAuth";
 import { notifyTeam, notifyUsers } from "@/lib/notifications";
@@ -42,9 +42,18 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   try {
     const starters = lineup.slots.filter((s) => s.isStarter && s.player).map((s) => s.player!.gamerTag);
+    const bench = lineup.slots.filter((s) => !s.isStarter && s.player).map((s) => s.player!.gamerTag);
+    const appUrl = process.env.NEXTAUTH_URL || new URL(_req.url).origin;
+    const descriptionParts = [
+      lineup.formation ? `**Formation:** ${lineup.formation}` : null,
+      starters.length > 0 ? `**Startelf:** ${starters.join(", ")}` : null,
+      bench.length > 0 ? `**Ersatzbank:** ${bench.join(", ")}` : null,
+    ].filter(Boolean);
     await sendWebhookAnnouncement({
       title: `🚀 Aufstellung veröffentlicht: vs. ${match.opponent}`,
-      description: starters.length > 0 ? `**Startelf:** ${starters.join(", ")}` : undefined,
+      description: descriptionParts.length > 0 ? descriptionParts.join("\n") : undefined,
+      url: `${appUrl}/aufstellung/${match.id}`,
+      footer: { text: "Komplette Aufstellung auf dem Spielfeld im Team-Hub ansehen" },
     });
   } catch {
     // in-app Benachrichtigung wurde bereits erstellt, Discord ist optional
