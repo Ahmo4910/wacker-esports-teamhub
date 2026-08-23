@@ -37,10 +37,11 @@ model User {
   player        Player?
   notifications Notification[]
 
-  lineupsUpdated Lineup[]  @relation("LineupUpdatedBy")
-  tacticsUpdated Tactic[]  @relation("TacticUpdatedBy")
-  matchesCreated Match[]   @relation("MatchCreatedBy")
-  matchesUpdated Match[]   @relation("MatchUpdatedBy")
+  lineupsUpdated   Lineup[]   @relation("LineupUpdatedBy")
+  tacticsUpdated   Tactic[]   @relation("TacticUpdatedBy")
+  matchesCreated   Match[]    @relation("MatchCreatedBy")
+  matchesUpdated   Match[]    @relation("MatchUpdatedBy")
+  trainingsCreated Training[] @relation("TrainingCreatedBy")
 }
 
 // --- Kader / Spieler ---------------------------------------------------------
@@ -63,9 +64,10 @@ model Player {
   discordUserId     String?  @unique // numerische Discord-User-ID, für die Verknüpfung von Discord-Interaktionen (Zu-/Absage-Buttons)
   joinedAt          DateTime @default(now())
 
-  availabilities     Availability[]
-  lineupSlots        LineupSlot[]
-  weeklyAvailability WeeklyAvailability[]
+  availabilities         Availability[]
+  lineupSlots            LineupSlot[]
+  weeklyAvailability     WeeklyAvailability[]
+  trainingAvailabilities TrainingAvailability[]
 }
 
 // --- Wettbewerbe & Spiele -----------------------------------------------------
@@ -134,6 +136,40 @@ model WeeklyAvailability {
   fromTime String  // "18:00"
   toTime   String  // "22:00"
   note     String?
+}
+
+// --- Training ------------------------------------------------------------------
+// Eigener, einfacher Bereich für Trainingstermine (getrennt vom Spielplan) —
+// bewusst ohne Aufstellung/Taktik/Ergebnis, nur Termin + Zu-/Absage.
+
+model Training {
+  id       String   @id @default(cuid())
+  date     DateTime
+  location String? // z.B. "Discord Voice", "TeamSpeak", "vor Ort"
+  notes    String?
+
+  discordMessageId String?
+
+  createdById String?
+  createdBy   User?   @relation("TrainingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  availabilities TrainingAvailability[]
+}
+
+model TrainingAvailability {
+  id          String    @id @default(cuid())
+  trainingId  String
+  training    Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING") // ACCEPTED | DECLINED | PENDING
+  reason      String?
+  respondedAt DateTime?
+
+  @@unique([trainingId, playerId])
 }
 
 // --- Aufstellung -----------------------------------------------------------------

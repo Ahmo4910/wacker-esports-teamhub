@@ -12,6 +12,7 @@ import {
   Clock3,
   UserX,
   Trophy,
+  Dumbbell,
 } from "lucide-react";
 
 type Notif = {
@@ -32,6 +33,7 @@ const ICONS: Record<string, any> = {
   MATCH_REMINDER: Clock3,
   PLAYER_DECLINED: UserX,
   RESULT_ENTERED: Trophy,
+  TRAINING_CREATED: Dumbbell,
   GENERAL: Bell,
 };
 

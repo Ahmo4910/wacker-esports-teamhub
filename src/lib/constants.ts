@@ -310,6 +310,7 @@ export const NOTIFICATION_TYPES = [
   "MATCH_REMINDER",
   "PLAYER_DECLINED",
   "RESULT_ENTERED",
+  "TRAINING_CREATED",
   "GENERAL",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
