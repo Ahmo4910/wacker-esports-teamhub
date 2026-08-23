@@ -37,9 +37,13 @@ export async function POST(req: Request) {
 
   if (interaction.type === MESSAGE_COMPONENT) {
     const customId: string = interaction.data?.custom_id ?? "";
-    const [namespace, action, matchId] = customId.split(":");
+    const [namespace, action, entityId] = customId.split(":");
 
-    if (namespace !== "rsvp" || !matchId) {
+    if ((namespace !== "rsvp" && namespace !== "training-rsvp") || !entityId) {
+      return reply("Unbekannte Aktion.");
+    }
+
+    if (action !== "accept" && action !== "decline") {
       return reply("Unbekannte Aktion.");
     }
 
@@ -57,16 +61,48 @@ export async function POST(req: Request) {
       );
     }
 
+    const status = action === "accept" ? "ACCEPTED" : "DECLINED";
+
+    if (namespace === "training-rsvp") {
+      const training = await prisma.training.findUnique({ where: { id: entityId } });
+      if (!training) {
+        return reply("Dieser Trainingstermin existiert nicht mehr.");
+      }
+
+      await prisma.trainingAvailability.upsert({
+        where: { trainingId_playerId: { trainingId: entityId, playerId: player.id } },
+        update: { status, reason: null, respondedAt: new Date() },
+        create: { trainingId: entityId, playerId: player.id, status, respondedAt: new Date() },
+      });
+
+      if (status === "DECLINED") {
+        const leads = await prisma.user.findMany({
+          where: { role: { in: ["CAPTAIN", "MANAGER"] }, active: true },
+          select: { id: true },
+        });
+        await notifyUsers(
+          leads.map((l) => l.id),
+          {
+            type: "PLAYER_DECLINED",
+            title: "Ein Spieler hat für das Training abgesagt",
+            message: `${player.gamerTag} hat über Discord für das Training abgesagt.`,
+            link: `/training/${training.id}`,
+          }
+        );
+      }
+
+      return reply(
+        status === "ACCEPTED"
+          ? `✅ Danke ${player.gamerTag}, deine Zusage für das Training wurde gespeichert.`
+          : `❌ Okay ${player.gamerTag}, deine Absage für das Training wurde gespeichert. Einen Grund kannst du optional noch im Team-Hub eintragen.`
+      );
+    }
+
+    const matchId = entityId;
     const match = await prisma.match.findUnique({ where: { id: matchId } });
     if (!match) {
       return reply("Dieser Spieltag existiert nicht mehr.");
     }
-
-    if (action !== "accept" && action !== "decline") {
-      return reply("Unbekannte Aktion.");
-    }
-
-    const status = action === "accept" ? "ACCEPTED" : "DECLINED";
 
     await prisma.availability.upsert({
       where: { matchId_playerId: { matchId, playerId: player.id } },

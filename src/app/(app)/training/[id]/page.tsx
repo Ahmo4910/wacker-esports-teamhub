@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { AvailabilityTable } from "@/components/AvailabilityTable";
 import { TrainingRsvpButtons } from "@/components/TrainingRsvpButtons";
 import { TrainingDeleteButton } from "@/components/TrainingDeleteButton";
+import { TrainingDiscordAnnounceButton } from "@/components/TrainingDiscordAnnounceButton";
 import { formatDateTime } from "@/lib/utils";
 import { CalendarDays, Dumbbell, MapPin } from "lucide-react";
 
@@ -28,7 +29,13 @@ export default async function TrainingDetailPage({ params }: { params: { id: str
       <PageHeader
         title="Training"
         subtitle={formatDateTime(training.date)}
-        actions={isLead ? <TrainingDeleteButton trainingId={training.id} /> : undefined}
+        actions={
+          isLead ? (
+            <div className="flex items-center gap-2">
+              <TrainingDeleteButton trainingId={training.id} />
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -49,6 +56,15 @@ export default async function TrainingDetailPage({ params }: { params: { id: str
               <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-ink-200">
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">Notizen</p>
                 {training.notes}
+              </div>
+            )}
+
+            {isLead && (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <TrainingDiscordAnnounceButton
+                  trainingId={training.id}
+                  alreadyAnnounced={!!training.discordMessageId}
+                />
               </div>
             )}
           </div>

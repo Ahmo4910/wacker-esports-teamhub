@@ -148,7 +148,8 @@ model Training {
   location String? // z.B. "Discord Voice", "TeamSpeak", "vor Ort"
   notes    String?
 
-  discordMessageId String?
+  discordMessageId String? // ID der Discord-Nachricht mit den Zu-/Absage-Buttons (falls dort angekündigt)
+  discordChannelId String? // Kanal, in dem die Discord-Nachricht gepostet wurde
 
   createdById String?
   createdBy   User?   @relation("TrainingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

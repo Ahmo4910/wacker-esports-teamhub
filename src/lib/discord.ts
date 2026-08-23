@@ -134,6 +134,82 @@ export async function postMatchAnnouncementWithButtons(params: {
   return { messageId: message.id as string, channelId };
 }
 
+/**
+ * Postet eine Trainings-Ankündigung mit Zusage-/Absage-Buttons über die Bot-REST-API
+ * in den konfigurierten Kanal. Erfordert DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID.
+ * Gibt die Discord-Message-ID zurück (wird am Training gespeichert).
+ */
+export async function postTrainingAnnouncementWithButtons(params: {
+  trainingId: string;
+  dateLabel: string;
+  location?: string | null;
+  notes?: string | null;
+  appUrl: string;
+}) {
+  if (!isBotConfigured()) {
+    throw new Error(
+      "Discord-Bot ist nicht konfiguriert. Bitte DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY und DISCORD_CHANNEL_ID setzen (siehe README)."
+    );
+  }
+
+  const channelId = process.env.DISCORD_CHANNEL_ID!;
+  const body = {
+    embeds: [
+      {
+        color: WACKER_COLOR,
+        title: "🏋️ Neuer Trainingstermin",
+        description: [
+          `📅 ${params.dateLabel}`,
+          params.location ? `📍 ${params.location}` : null,
+          params.notes ? params.notes : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        url: `${params.appUrl}/training/${params.trainingId}`,
+        footer: { text: "Bitte bis spätestens einen Tag vorher zu-/absagen." },
+      },
+    ],
+    components: [
+      {
+        type: 1, // Action Row
+        components: [
+          {
+            type: 2, // Button
+            style: 3, // Success (grün)
+            label: "Zusage",
+            emoji: { name: "✅" },
+            custom_id: `training-rsvp:accept:${params.trainingId}`,
+          },
+          {
+            type: 2,
+            style: 4, // Danger (rot)
+            label: "Absage",
+            emoji: { name: "❌" },
+            custom_id: `training-rsvp:decline:${params.trainingId}`,
+          },
+        ],
+      },
+    ],
+  };
+
+  const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Discord-Bot-Nachricht fehlgeschlagen (${res.status}): ${text}`);
+  }
+
+  const message = await res.json();
+  return { messageId: message.id as string, channelId };
+}
+
 /** Verifiziert die Ed25519-Signatur eines eingehenden Discord-Interaction-Requests. */
 export function verifyDiscordRequest(rawBody: string, signature: string | null, timestamp: string | null) {
   const publicKey = process.env.DISCORD_PUBLIC_KEY;
