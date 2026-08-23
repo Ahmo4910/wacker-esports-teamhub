@@ -1,0 +1,42 @@
+# Optionaler lokaler Stack: App + PostgreSQL-Datenbank.
+#
+# WICHTIG: Für PostgreSQL muss in prisma/schema.prisma der datasource-provider
+# von "sqlite" auf "postgresql" umgestellt werden (siehe README → Deployment).
+#
+# Start:  docker compose up --build
+# Danach einmalig Beispieldaten laden:
+#   docker compose exec app npm run db:seed
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wacker
+      POSTGRES_PASSWORD: wacker
+      POSTGRES_DB: wacker_esports
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wacker -d wacker_esports"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://wacker:wacker@db:5432/wacker_esports?schema=public"
+      NEXTAUTH_SECRET: "bitte-aendern-openssl-rand-base64-32"
+      NEXTAUTH_URL: "http://localhost:3000"
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:

@@ -1,0 +1,196 @@
+// ---------------------------------------------------------------------------
+// SV Wacker Burghausen eSports — Datenbankschema
+//
+// Standard: SQLite (Datei-basiert, kein Setup nötig, sofort startbar).
+// Produktion: Provider unten auf "postgresql" umstellen und DATABASE_URL auf
+// eine Postgres-Instanz (Supabase / Neon / Railway) zeigen lassen.
+// Siehe README.md → Abschnitt "Deployment".
+//
+// Enums werden bewusst als String modelliert (nicht als natives Prisma-Enum),
+// damit exakt dasselbe Schema unverändert sowohl mit SQLite als auch mit
+// PostgreSQL funktioniert (SQLite unterstützt keine nativen Enums). Die
+// gültigen Werte sind zentral in src/lib/constants.ts als TypeScript-Typen
+// gepflegt und werden dort und in den API-Routen validiert.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Benutzer & Zugriff -----------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("PLAYER") // PLAYER | CAPTAIN | MANAGER
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  player        Player?
+  notifications Notification[]
+
+  lineupsUpdated Lineup[]  @relation("LineupUpdatedBy")
+  tacticsUpdated Tactic[]  @relation("TacticUpdatedBy")
+  matchesCreated Match[]   @relation("MatchCreatedBy")
+  matchesUpdated Match[]   @relation("MatchUpdatedBy")
+}
+
+// --- Kader / Spieler ---------------------------------------------------------
+
+model Player {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  gamerTag          String
+  realName          String?
+  avatarUrl         String?
+  jerseyNumber      Int?
+  primaryPosition   String?  // siehe POSITIONS in constants.ts (z.B. TW, IV, ZM, ST, ...) — optional für reine Staff-Profile (Coach)
+  secondaryPosition String?
+  squadRole         String   @default("STAMMSPIELER") // STAMMSPIELER | ERSATZSPIELER | CAPTAIN | MANAGER | COACH
+  status            String   @default("AVAILABLE")    // AVAILABLE | UNAVAILABLE | INJURED
+  bio               String?
+  discordTag        String?  // Anzeigename, z.B. "name" oder "name#0001" (nur Info)
+  discordUserId     String?  @unique // numerische Discord-User-ID, für die Verknüpfung von Discord-Interaktionen (Zu-/Absage-Buttons)
+  joinedAt          DateTime @default(now())
+
+  availabilities     Availability[]
+  lineupSlots        LineupSlot[]
+  weeklyAvailability WeeklyAvailability[]
+}
+
+// --- Wettbewerbe & Spiele -----------------------------------------------------
+
+model Competition {
+  id      String  @id @default(cuid())
+  name    String
+  season  String?
+  matches Match[]
+}
+
+model Match {
+  id            String   @id @default(cuid())
+  opponent      String
+  opponentLogo  String?
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id])
+  matchdayLabel String?      // z.B. "Spieltag 5", "Halbfinale"
+  date          DateTime
+  homeAway      String       @default("HOME") // HOME | AWAY
+  status        String       @default("SCHEDULED") // SCHEDULED | LINEUP_OPEN | LINEUP_PUBLISHED | PLAYED | CANCELLED
+  streamUrl     String?
+  notes         String?
+
+  discordMessageId String? // ID der Discord-Nachricht mit den Zu-/Absage-Buttons (falls dort angekündigt)
+  discordChannelId String? // Kanal, in dem die Discord-Nachricht gepostet wurde
+
+  resultOwnScore      Int?
+  resultOpponentScore Int?
+
+  createdById String?
+  createdBy   User?   @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("MatchUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  availabilities Availability[]
+  lineup         Lineup?
+  tactic         Tactic?
+}
+
+// --- Zu-/Absagen ---------------------------------------------------------------
+
+model Availability {
+  id          String    @id @default(cuid())
+  matchId     String
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING") // ACCEPTED | DECLINED | PENDING
+  reason      String?
+  respondedAt DateTime?
+
+  @@unique([matchId, playerId])
+}
+
+// --- Wöchentliche Standardverfügbarkeit (zusätzlich zu Spiel-Zusagen) ----------
+
+model WeeklyAvailability {
+  id       String  @id @default(cuid())
+  playerId String
+  player   Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  weekday  Int     // 0 = Montag ... 6 = Sonntag
+  fromTime String  // "18:00"
+  toTime   String  // "22:00"
+  note     String?
+}
+
+// --- Aufstellung -----------------------------------------------------------------
+
+model Lineup {
+  id          String    @id @default(cuid())
+  matchId     String    @unique
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  formation   String    @default("4-3-3")
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  updatedById String?
+  updatedBy   User?     @relation("LineupUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt
+
+  slots LineupSlot[]
+}
+
+model LineupSlot {
+  id        String  @id @default(cuid())
+  lineupId  String
+  lineup    Lineup  @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  slotKey   String  // z.B. "TW","IV1","IV2","IV3","LM","RM","ZM1","ZM2","ST" oder "SUB1".."SUB7"
+  isStarter Boolean @default(true)
+  order     Int     @default(0)
+  playerId  String?
+  player    Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@unique([lineupId, slotKey])
+}
+
+// --- Taktik --------------------------------------------------------------------
+
+model Tactic {
+  id           String   @id @default(cuid())
+  matchId      String   @unique
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  formation    String   @default("4-3-3")
+  style        String   @default("BALANCED") // OFFENSIVE | BALANCED | DEFENSIVE
+  pressing     String   @default("MID")      // HIGH | MID | LOW
+  tempo        String   @default("NORMAL")   // SLOW | NORMAL | FAST
+  instructions String?
+  updatedById  String?
+  updatedBy    User?    @relation("TacticUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt    DateTime @updatedAt
+}
+
+// --- Benachrichtigungen ----------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // MATCHDAY_CREATED | SELECTED | LINEUP_PUBLISHED | TACTIC_UPDATED | MATCH_REMINDER | PLAYER_DECLINED | RESULT_ENTERED | GENERAL
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
